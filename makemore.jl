@@ -1,5 +1,6 @@
 using Plots, Distributions, Random, StatsBase, LinearAlgebra
 using Zygote
+
 w_chars(w) = [".", string.(collect(w))..., "."]
 zipit(wcs) = zip(wcs, wcs[2:end])
 
@@ -100,7 +101,7 @@ nll = -log_likelihood
 # train set
 xs, ys = [], []
 
-for w in ws
+for w in ws[[1]]
     wcs = w_chars(w)
     for (a, b) in zipit(wcs)
         ix1, ix2 = getd(stoi, (a, b))
@@ -136,30 +137,31 @@ logits = xenc * W # "log counts"
 counts = exp.(logits) # analogous to count mat N above 
 probs = norm_rows(counts)
 loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
-# @show loss
 
 for i in 1:10
 
-g =
-    gradient(Params([W])) do
-        logits = xenc * W # "log counts"
-        counts = exp.(logits) # analogous to count mat N above 
-        probs = norm_rows(counts)
-        loss = mean(log.(probs[CartesianIndex.(1:num, ys)]))
-        @show loss
-        loss
-    end
+    g =
+        gradient(Params([W])) do
+            logits = xenc * W # "log counts"
+            counts = exp.(logits) # analogous to count mat N above 
+            probs = norm_rows(counts)
+            # loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
+            loss = -mean(log.(probs[CartesianIndex.(1:num, ys)])) + 0.01 * sum(W .^ 2)
+            @show loss
+            loss
+        end
 
-dl_dW = g[W]
+    dl_dW = g[W]
 
-W += 1 * dl_dW
-# @show i, loss
+    W += -1 * dl_dW
+    # @show i, loss
 
 end
 
-a, b,c = 1,2,3
-g = gradient(Params([a,b,c])) do 
-    a*b+c
+
+a, b, c = 1, 2, 3
+g = gradient(Params([a, b, c])) do
+    a * b + c
 end
 g.grads
 # dg/dc 
