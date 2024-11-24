@@ -101,7 +101,7 @@ nll = -log_likelihood
 # train set
 xs, ys = [], []
 
-for w in ws
+for w in ws[[1]]
     wcs = w_chars(w)
     for (a, b) in zipit(wcs)
         ix1, ix2 = getd(stoi, (a, b))
@@ -109,43 +109,25 @@ for w in ws
         push!(ys, ix2)
     end
 end
+
+getd(itos, xs)
+getd(itos, ys)
 # heatmap(stack(onehot(xs[1:5], 27))')
 xenc = stack(onehot(xs, 27))'
-# say xenc is 1x27 
-# xenc = stack(onehot(xs[[1]], 27))'
-
 num = size(xenc, 1)
-
-W = randn(27, 1)
-# Nx27 * 27x1 = Nx1
-xenc * W  # log counts
-# then the matmul is 1x1 when W is 27x1 
-W = randn(27, 27)
-logits = xenc * W # "log counts"
-counts = exp.(logits) # analogous to count mat N above 
-probs = norm_rows(counts)
-
-# now we have 27 values to use to try to infer  
-
-# since its bigram model, there can only be 27 unique outputs even when evaluating on the 
-# entire dataset 
-unique(eachrow(probs)) |> length # 27
-
-
 W = randn(27, 27)
 logits = xenc * W # "log counts"
 counts = exp.(logits) # analogous to count mat N above 
 probs = norm_rows(counts)
 loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
 
-for i in 1:30
+for i in 1:100
 
     g =
         gradient(Params([W])) do
             logits = xenc * W # "log counts"
             counts = exp.(logits) # analogous to count mat N above 
-            probs = norm_rows(counts)
-            # loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
+            probs = counts ./ sum(counts, dims=2)
             loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
             @show loss
             loss
@@ -153,6 +135,41 @@ for i in 1:30
 
     dl_dW = g[W]
 
-    W += -50 * dl_dW
+    W += -1 * dl_dW
 
 end
+# generation
+W
+for i in 1:5
+    out = []
+    ix = 1
+    while true
+        xenc = stack(onehot([1], 27))'
+        logits = xenc * W
+        counts = exp.(logits)
+        p = norm_rows(counts)
+        # @show p
+        d = Categorical(vec(p))
+        ix = rand(d)
+        # @show ix
+        push!(out, itos[ix])
+        if ix == 1
+            break
+        end
+
+    end
+    println(join(out))
+end
+
+# why am i getting totally nonsensical answers 
+
+out = []
+xenc = stack(onehot([1], 27))'
+logits = xenc * W
+counts = exp.(logits)
+p = norm_rows(counts)
+# @show p
+d = Categorical(vec(p))
+ix = only(rand(d, 1))
+# @show ix
+push!(out, itos[ix])
