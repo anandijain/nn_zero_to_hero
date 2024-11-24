@@ -101,7 +101,7 @@ nll = -log_likelihood
 # train set
 xs, ys = [], []
 
-for w in ws[[1]]
+for w in ws
     wcs = w_chars(w)
     for (a, b) in zipit(wcs)
         ix1, ix2 = getd(stoi, (a, b))
@@ -138,7 +138,7 @@ counts = exp.(logits) # analogous to count mat N above
 probs = norm_rows(counts)
 loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
 
-for i in 1:10
+for i in 1:30
 
     g =
         gradient(Params([W])) do
@@ -146,35 +146,13 @@ for i in 1:10
             counts = exp.(logits) # analogous to count mat N above 
             probs = norm_rows(counts)
             # loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
-            loss = -mean(log.(probs[CartesianIndex.(1:num, ys)])) + 0.01 * sum(W .^ 2)
+            loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
             @show loss
             loss
         end
 
     dl_dW = g[W]
 
-    W += -1 * dl_dW
-    # @show i, loss
+    W += -50 * dl_dW
 
 end
-
-
-a, b, c = 1, 2, 3
-g = gradient(Params([a, b, c])) do
-    a * b + c
-end
-g.grads
-# dg/dc 
-
-# a*b+(c+h) - a*b+c
-# h/h / dg/dc  = 1
-# e = a*b
-# e + c 
-# dg/de =
-# e+h + c- e+ c
-# 1  
-# de/da = 
-# (a+h)*b - a*b = ab + bh - ab = bh/h = b
-# de/da = b = 2
-# dg/da = 2*(de/dc=1 )=2
-# dg/db = a * de/dc = 1
