@@ -156,3 +156,23 @@ W += 1 * dl_dW
 # @show i, loss
 
 end
+
+a, b,c = 1,2,3
+g = gradient(Params([a,b,c])) do 
+    a*b+c
+end
+g.grads
+# dg/dc 
+
+# a*b+(c+h) - a*b+c
+# h/h / dg/dc  = 1
+# e = a*b
+# e + c 
+# dg/de =
+# e+h + c- e+ c
+# 1  
+# de/da = 
+# (a+h)*b - a*b = ab + bh - ab = bh/h = b
+# de/da = b = 2
+# dg/da = 2*(de/dc=1 )=2
+# dg/db = a * de/dc = 1
