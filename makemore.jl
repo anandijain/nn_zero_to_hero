@@ -36,22 +36,23 @@ extrema(length.(ws))
 
 stoi = Dict(cs .=> (eachindex(cs) .+ 1))
 stoi["."] = 1
-
+alpha = [".", cs...] 
 itos = Dict(reverse.(collect(stoi)))
 
-tally(reduce(vcat, collect.(zipit.(w_chars.(ws)))))
+T = tally(reduce(vcat, collect.(zipit.(w_chars.(ws)))))
 
 N = build_bigram_heatmap_array(ws)
 # smoothing 
 N .+= 1
 N[1, :]
 p = N[1, :] ./ sum(N[1, :])
+
 sum(p)
 seed = rand(UInt)
 rng = MersenneTwister(seed)
 
 dist = Categorical(p)
-ixs = rand(rng, dist, 100)
+ixs = rand(rng, dist, 10000)
 getd(itos, ixs) |> tally
 
 pvecs = map(x -> normalize(x, 1), eachrow(N))
@@ -66,7 +67,6 @@ for i in 1:30
     while true
         ix = only(rand(rng, dists[ix], 1))
         push!(out, itos[ix])
-        # print(itos[ix])
         if ix == 1
             break
         end
@@ -80,7 +80,8 @@ log_likelihood = 0.0
 n = 0
 
 # shows anand is a relatively common name 
-for w in ["anand"]
+# for w in ["anand"]
+for w in ws
     wcs = w_chars(w)
     for (a, b) in zipit(wcs)
         ix1, ix2 = getd(stoi, (a, b))
@@ -88,7 +89,7 @@ for w in ["anand"]
         logprob = log(prob)
         log_likelihood += logprob
         n += 1
-        println("$(a)$(b): $(prob) $logprob")
+        # println("$(a)$(b): $(prob) $logprob")
     end
 end
 @show log_likelihood
@@ -115,20 +116,23 @@ getd(itos, ys)
 # heatmap(stack(onehot(xs[1:5], 27))')
 xenc = stack(onehot(xs, 27))'
 num = size(xenc, 1)
-W = randn(27, 27)
 logits = xenc * W # "log counts"
 counts = exp.(logits) # analogous to count mat N above 
 probs = norm_rows(counts)
-loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
+gt_preds = probs[CartesianIndex.(1:num, ys)]
+loss = -mean(log.(gt_preds))
 
+
+W = randn(27, 27)
+λ=0.01
 for i in 1:100
-
     g =
         gradient(Params([W])) do
             logits = xenc * W # "log counts"
             counts = exp.(logits) # analogous to count mat N above 
             probs = counts ./ sum(counts, dims=2)
-            loss = -mean(log.(probs[CartesianIndex.(1:num, ys)]))
+            nums = probs[CartesianIndex.(2:num, ys[2:end])]
+            loss = -mean(log.(nums)) #+ λ * sum(W .^ 2)
             @show loss
             loss
         end
@@ -144,8 +148,8 @@ for i in 1:5
     out = []
     ix = 1
     while true
-        xenc = stack(onehot([1], 27))'
-        logits = xenc * W
+        xenc_ = stack(onehot([ix], 27))'
+        logits = xenc_ * W
         counts = exp.(logits)
         p = norm_rows(counts)
         # @show p
@@ -160,16 +164,3 @@ for i in 1:5
     end
     println(join(out))
 end
-
-# why am i getting totally nonsensical answers 
-
-out = []
-xenc = stack(onehot([1], 27))'
-logits = xenc * W
-counts = exp.(logits)
-p = norm_rows(counts)
-# @show p
-d = Categorical(vec(p))
-ix = only(rand(d, 1))
-# @show ix
-push!(out, itos[ix])
