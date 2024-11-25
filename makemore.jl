@@ -102,7 +102,7 @@ nll = -log_likelihood
 # train set
 xs, ys = [], []
 
-for w in ws[[1]]
+for w in ws
     wcs = w_chars(w)
     for (a, b) in zipit(wcs)
         ix1, ix2 = getd(stoi, (a, b))
@@ -133,17 +133,16 @@ for i in 1:100
             probs = counts ./ sum(counts, dims=2)
             nums = probs[CartesianIndex.(2:num, ys[2:end])]
             loss = -mean(log.(nums)) #+ λ * sum(W .^ 2)
-            @show loss
+            @show i, loss
             loss
         end
 
     dl_dW = g[W]
 
-    W += -1 * dl_dW
+    W += -50 * dl_dW
 
 end
 # generation
-W
 for i in 1:5
     out = []
     ix = 1
