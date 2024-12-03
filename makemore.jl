@@ -116,14 +116,18 @@ getd(itos, ys)
 # heatmap(stack(onehot(xs[1:5], 27))')
 xenc = stack(onehot(xs, 27))'
 num = size(xenc, 1)
+W = randn(27, 27)
 logits = xenc * W # "log counts"
 counts = exp.(logits) # analogous to count mat N above 
 probs = norm_rows(counts)
-gt_preds = probs[CartesianIndex.(1:num, ys)]
+
+gt_preds = probs[CartesianIndex.(1:num, ys)] # this is the predicted probabilities for the correct answer 
+# so for xs[1] "." its saying that 'e' comes next predicted .05 probability
+
+# i just dont understand how the loss is not done via comparison to something 
 loss = -mean(log.(gt_preds))
 
 
-W = randn(27, 27)
 λ=0.01
 for i in 1:100
     g =
@@ -163,3 +167,4 @@ for i in 1:5
     end
     println(join(out))
 end
+
