@@ -123,6 +123,10 @@ println(logitcrossentropy(logits, onehot(Y, 27); dims=2))
 
 #non mutating fwd pass
 # ps = Params([C, W1, b1, W2, b2])
+
+# TODO need to see if logitcrossentropy improves the loss
+# currently with minibatching and without getting a min loss of 4.5ish 
+# compared to andrej with 2.7 at this stage
 for i in 1:100
     idxs = rand(1:nx, batch_size)
     batch = X[idxs, :]
@@ -169,6 +173,7 @@ for i in 1:5
     end
     println(join(out))
 end
+
 # check whats wrong when generating with random weights, too many V for my likey
 xenc = ones(Int, block_size)
 emb = reshape(permutedims(reshape(C[vec(xenc), :], (:, block_size, emb_dim)), (1, 3, 2)), (:, 6))
