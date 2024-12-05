@@ -1,7 +1,7 @@
 using Flux, OneHotArrays, ProgressMeter, StatsBase, Plots
 using Flux.Losses
 
-function get_dataset(block_size)
+function get_dataset(words, block_size)
     X, Y = [], Int[]
     for w in words
         context = ones(Int, block_size)
@@ -23,6 +23,7 @@ function get_dataset(block_size)
 end
 
 words = readlines("names.txt")
+nw = length(words)
 achars = string.(sort(unique(join(words))))
 chars = [".", achars...]
 vocab_size = length(chars)
@@ -97,7 +98,7 @@ counts = exp.(logits .- maximum(logits))
 probabilities = norm_rows(counts')
 loss = -mean(log.(probabilities[CartesianIndex.(1:nx, Y)]))
 
-
+# learning rate experiment
 n_samples = 2000 
 lre = LinRange(-4, 0, n_samples)
 lrs = 10 .^ lre
@@ -119,8 +120,27 @@ for (i, (xbatch, ybatch)) in enumerate(loader)
     end
 end
 
-plot(lrs, losses)
+plot(lre, losses)
 # end
+logits = model(X)
+loss = logitcrossentropy(logits, Y_oh)
+counts = exp.(logits .- maximum(logits))
+probabilities = norm_rows(counts')
+loss = -mean(log.(probabilities[CartesianIndex.(1:nx, Y)]))
+
+# learning rate experiment
+loader = Flux.DataLoader((eachrow(X), Y), batchsize=64, shuffle=true);
+losses = []
+opt_state = Flux.setup(Flux.Descent(0.1), model)  # will store optimiser momentum, etc.
+
+for (i, (xbatch, ybatch)) in enumerate(loader)
+    loss, grads = Flux.withgradient(model) do m
+        logits = m(stack(xbatch; dims=1))
+        loss = logitcrossentropy(logits, onehotbatch(ybatch, 1:27))
+    end
+    Flux.update!(opt_state, model, grads[1])
+    push!(losses, loss)  # logging, outside gradient context
+end
 
 loss = logitcrossentropy(model(X), onehotbatch(Y, 1:27))
 
@@ -144,3 +164,31 @@ for i in 1:5
 
 end
 
+
+
+# train 80 , dev 10 , test 10 
+shuffled_words = shuffle(words)
+Xs, Ys = get_dataset(shuffled_words, block_size)
+tr_idx = round(Int, nw * .8)
+dev_idx = round(Int, nw * .9)
+Xtr, Ytr = get_dataset(shuffled_words[1:tr_idx], block_size)
+Xdev, Ydev = get_dataset(shuffled_words[(tr_idx+1):dev_idx], block_size)
+Xte, Yte = get_dataset(shuffled_words[(dev_idx+1):end], block_size)
+
+@test reduce(vcat, [Xtr, Xdev, Xte]) == Xs
+
+loader = Flux.DataLoader((eachrow(Xtr), Ytr), batchsize=32, shuffle=true);
+losses = []
+opt_state = Flux.setup(Flux.Descent(0.1), model)  # will store optimiser momentum, etc.
+
+for (i, (xbatch, ybatch)) in enumerate(loader)
+    loss, grads = Flux.withgradient(model) do m
+        logits = m(stack(xbatch; dims=1))
+        loss = logitcrossentropy(logits, onehotbatch(ybatch, 1:27))
+    end
+    Flux.update!(opt_state, model, grads[1])
+    push!(losses, loss)  # logging, outside gradient context
+end
+
+loss = logitcrossentropy(model(Xtr), onehotbatch(Ytr, 1:27))
+loss = logitcrossentropy(model(Xdev), onehotbatch(Ydev, 1:27))
