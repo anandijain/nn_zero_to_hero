@@ -105,9 +105,9 @@ loss = -mean(log.(probabilities[CartesianIndex.(1:length(Y), Y)]))
 
 
 # cleaned up version
-lr = .0001
+lr = .01
 emb_dim = 2
-batch_size = 10000
+batch_size = 1000
 h_dim = 100
 C = randn(vocab_size, emb_dim)
 W1 = randn(emb_dim * block_size, h_dim)
@@ -127,19 +127,23 @@ println(logitcrossentropy(logits, onehot(Y, 27); dims=2))
 # TODO need to see if logitcrossentropy improves the loss
 # currently with minibatching and without getting a min loss of 4.5ish 
 # compared to andrej with 2.7 at this stage
-for i in 1:100
+
+for i in 1:20
     idxs = rand(1:nx, batch_size)
     batch = X[idxs, :]
     y_batch = Y[idxs]
     g = gradient(Params([C, W1, b1, W2, b2])) do
         emb = reshape(permutedims(reshape(C[vec(batch), :], (:, block_size, emb_dim)), (1, 3, 2)), (:, 6))
         logits = tanh.(emb * W1 .+ b1) * W2 .+ b2
-        counts = exp.(logits)
+        
+        counts = exp.(logits .- maximum(logits))
         probabilities = norm_rows(counts)
         loss = -mean(log.(probabilities[CartesianIndex.(1:batch_size, y_batch)]))
+        # logitcrossentropy(logits, onehot(y_batch, 27);dims=2)
         @show loss
         loss
     end
+
     C += -lr * g[C]
     W1 += -lr * g[W1]
     b1 += -lr * g[b1]
