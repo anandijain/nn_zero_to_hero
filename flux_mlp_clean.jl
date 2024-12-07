@@ -22,27 +22,46 @@ function get_dataset(words, block_size)
     (X, Y)
 end
 
-function generate(model, n)
+function generate(model, n, block_size; maxlen=100)
     outs = []
-    for i in 1:n
+    for _ in 1:n
         xenc = ones(Int, block_size)
         out = []
+        i = 1
         while true
-            logits = model(reshape(xenc, (1, 3)))
+            logits = model(reshape(xenc, (1, block_size)))
             counts = exp.(logits[:, 1] .- maximum(logits[:, 1]))
             ix = sample(Weights(counts))
             push!(out, itos[ix])
-            if ix == 1
+            if ix == 1 || i == maxlen
                 break
             end
             circshift!(xenc, -1)
             xenc[3] = ix
+            i += 1
         end
         o = join(out)
-        println(o)
+        # println(o)
         push!(outs, o)
     end
-    outs 
+    outs
+end
+
+# visualize embedding
+function embedding_plot(model)
+    C = model.layers[1].weight
+
+    emb_xys = eachcol(C)
+    xlims = extrema(C[1, :])
+    ylims = extrema(C[1, :])
+    uxys = unzip(emb_xys)
+
+    pl = scatter()
+    zuxt = collect(zip(uxys..., chars))
+    annotate!(pl, zuxt)
+    xlims!(pl, xlims)
+    ylims!(pl, ylims)
+    pl
 end
 
 
@@ -51,24 +70,12 @@ nw = length(words)
 achars = string.(sort(unique(join(words))))
 chars = [".", achars...]
 vocab_size = length(chars)
-block_size = 3
-
 
 stoi_ps = chars .=> eachindex(chars)
 stoi = Dict(stoi_ps)
 itos = Dict(reverse.(collect(stoi)))
 
-lr = 1
-emb_dim = 2
-h_dim = 200
-batch_size = 32
-
-model = Chain(
-    Embedding(vocab_size, emb_dim),
-    x -> reshape(permutedims(x, (2, 1, 3)), (:, block_size * emb_dim))',
-    Dense(block_size * emb_dim, h_dim, tanh; init=randn32),
-    Dense(h_dim, vocab_size; init=randn32)
-)
+block_size = 3
 
 shuffled_words = shuffle(words)
 Xs, Ys = get_dataset(shuffled_words, block_size)
@@ -78,31 +85,46 @@ Xtr, Ytr = get_dataset(shuffled_words[1:tr_idx], block_size)
 Xdev, Ydev = get_dataset(shuffled_words[(tr_idx+1):dev_idx], block_size)
 Xte, Yte = get_dataset(shuffled_words[(dev_idx+1):end], block_size)
 
-@test reduce(vcat, [Xtr, Xdev, Xte]) == Xs
+emb_dim = 10
+h_dim = 200
 
-loader = Flux.DataLoader((eachrow(Xtr), Ytr), batchsize=32, shuffle=true);
+model = Chain(
+    Embedding(vocab_size, emb_dim),
+    x -> reshape(permutedims(x, (2, 1, 3)), (:, block_size * emb_dim))',
+    Dense(block_size * emb_dim, h_dim, tanh; init=randn32),
+    Dense(h_dim, vocab_size; init=randn32)
+)
+
+
+# @test reduce(vcat, [Xtr, Xdev, Xte]) == Xs
+
+
+batch_size = 1000
+loader = Flux.DataLoader((eachrow(Xtr), Ytr), batchsize=batch_size, shuffle=true);
 losses = []
-opt_state = Flux.setup(Flux.Descent(0.01), model)  # will store optimiser momentum, etc.
+opt_state = Flux.setup(Flux.Descent(0.1), model)  # will store optimiser momentum, etc.
+nepochs=5
+for j in 1:nepochs
+    for (i, (xbatch, ybatch)) in enumerate(loader)
+        loss, grads = Flux.withgradient(model) do m
+            logits = m(stack(xbatch; dims=1))
+            loss = logitcrossentropy(logits, onehotbatch(ybatch, 1:27))
+        end
 
-for (i, (xbatch, ybatch)) in enumerate(loader)
-    loss, grads = Flux.withgradient(model) do m
-        logits = m(stack(xbatch; dims=1))
-        loss = logitcrossentropy(logits, onehotbatch(ybatch, 1:27))
+        Flux.update!(opt_state, model, grads[1])
+        push!(losses, loss)  # logging, outside gradient context
     end
-    Flux.update!(opt_state, model, grads[1])
-    push!(losses, loss)  # logging, outside gradient context
+    loss_tr = logitcrossentropy(model(Xtr), onehotbatch(Ytr, 1:27))
+    loss_dev = logitcrossentropy(model(Xdev), onehotbatch(Ydev, 1:27))
+    @show (loss_tr, loss_dev)
+    if j == 2
+        opt_state = Flux.setup(Flux.Descent(0.01), model)
+    elseif j == 3
+        opt_state = Flux.setup(Flux.Descent(0.001), model)
+    end
 end
 
-loss = logitcrossentropy(model(Xtr), onehotbatch(Ytr, 1:27))
-loss = logitcrossentropy(model(Xdev), onehotbatch(Ydev, 1:27))
+generate(model, 5, block_size)
+plot(log10.(losses))
 
-generate(model, 5)
-
-# visualize embedding
-emb_xys = eachcol(model.layers[1].weight)
-uxys = unzip(emb_xys)
-pl = scatter(uxys)
-for (i, emb_xy) in enumerate(emb_xys)
-    annotate!(emb_xy..., chars[i])
-end
-pl
+# embedding_plot(model)
