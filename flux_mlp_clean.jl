@@ -1,6 +1,7 @@
-using Flux, OneHotArrays, ProgressMeter, StatsBase, Plots, Random
+using Flux, OneHotArrays, ProgressMeter, StatsBase, Plots, Random, BenchmarkTools, LinearAlgebra
+using Graphs
 using Flux.Losses
-
+using Flux: glorot_uniform, kaiming_normal
 function get_dataset(words, block_size)
     X, Y = [], Int[]
     for w in words
@@ -86,23 +87,40 @@ Xdev, Ydev = get_dataset(shuffled_words[(tr_idx+1):dev_idx], block_size)
 Xte, Yte = get_dataset(shuffled_words[(dev_idx+1):end], block_size)
 
 emb_dim = 10
-h_dim = 200
+n_hidden = 200
+
+# model
+emb = Embedding(vocab_size, emb_dim) #;init=zeros),
+reshape_permute = x -> reshape(permutedims(x, (2, 1, 3)), (:, block_size * emb_dim))'
+l1 = Dense(block_size * emb_dim, n_hidden, relu; init=kaiming_normal)
+l2 = Dense(n_hidden, vocab_size; init=kaiming_normal)
 
 model = Chain(
-    Embedding(vocab_size, emb_dim),
-    x -> reshape(permutedims(x, (2, 1, 3)), (:, block_size * emb_dim))',
-    Dense(block_size * emb_dim, h_dim, tanh; init=randn32),
-    Dense(h_dim, vocab_size; init=randn32)
+    emb, 
+    reshape_permute,
+    l1,
+    l2
 )
+x = Xs[1:100, :]
+hf = ∘(reverse(model.layers[1:3])...)
+hpf = x -> model.layers[3].weight * ∘(reverse(model.layers[1:2])...)(x) .+ l1.bias
+h = hf(x)
+histogram(vec(h); bins=50)
+heatmap(abs.(h) .> 0.9)
 
+
+# note that dense layers init bias to 0 
+# model.layers[4].weight .*= 0.01
+loss_tr = logitcrossentropy(model(Xtr), onehotbatch(Ytr, 1:27))
 
 # @test reduce(vcat, [Xtr, Xdev, Xte]) == Xs
 
 
-batch_size = 1000
+batch_size = 32
 loader = Flux.DataLoader((eachrow(Xtr), Ytr), batchsize=batch_size, shuffle=true);
 losses = []
-opt_state = Flux.setup(Flux.Descent(0.1), model)  # will store optimiser momentum, etc.
+opt = Flux.Adam(0.01)
+opt_state = Flux.setup(Flux.Descent(), model)  # will store optimiser momentum, etc.
 nepochs=5
 for j in 1:nepochs
     for (i, (xbatch, ybatch)) in enumerate(loader)
@@ -120,11 +138,55 @@ for j in 1:nepochs
     if j == 2
         opt_state = Flux.setup(Flux.Descent(0.01), model)
     elseif j == 3
-        opt_state = Flux.setup(Flux.Descent(0.001), model)
+        opt_state = Flux.setup(Flux.Descent(0.01), model)
     end
 end
 
-generate(model, 5, block_size)
 plot(log10.(losses))
 
+loss_tr = logitcrossentropy(model(Xtr), onehotbatch(Ytr, 1:27))
+loss_dev = logitcrossentropy(model(Xdev), onehotbatch(Ydev, 1:27))
+
+
 # embedding_plot(model)
+
+h = hf(Xs[1:200, :])
+heatmap(abs.(h) .> .99)
+histogram(vec(h); bins=50)
+histogram(log.(vec(h)); bins=50)
+
+generate(model, 5, block_size)
+
+hp = hpf(x)
+u = mean(hp;dims=2)
+s = std(hp;dims=2)
+bngain = ones(n_hidden, 1)
+bnbias = zeros(n_hidden, 1)
+normed_hp = (hp .- u) ./ s
+bn_hp = bngain .* normed_hp .+ bnbias
+
+a= tril(ones(Bool, 4,4))
+b = tril(trues(4,4))
+sizeof(a)
+sizeof(b)
+sizeof(true)
+
+
+A = tril(trues(3,3))
+B = rand(1:10, (3,2))
+C = A * B
+1:(size(C, 1))
+@btime axes(C, 1)
+@btime C ./ axes(C, 1)
+wei = zeros(3,3)
+# @btime A .== 0
+
+wei[.!A] .= -Inf
+wei
+
+g = SimpleDiGraph(.!A)
+collect(edges(g))
+
+m = randn(2,2)
+
+Base.power_by_squaring(m, 10)
