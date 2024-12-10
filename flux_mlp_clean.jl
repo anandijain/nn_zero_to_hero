@@ -2,6 +2,7 @@ using Flux, OneHotArrays, ProgressMeter, StatsBase, Plots, Random, BenchmarkTool
 using Graphs
 using Flux.Losses
 using Flux: glorot_uniform, kaiming_normal
+
 function get_dataset(words, block_size)
     X, Y = [], Int[]
     for w in words
@@ -101,8 +102,15 @@ model = Chain(
     l1,
     l2
 )
-x = Xs[1:100, :]
+
+# embedding_plot(model)
+
+# taking a batch
+x = Xs[1:32, :]
+# x[1,:], Ys[1]
 hf = ∘(reverse(model.layers[1:3])...)
+hf = model[1:3]
+hf(x)
 hpf = x -> model.layers[3].weight * ∘(reverse(model.layers[1:2])...)(x) .+ l1.bias
 h = hf(x)
 histogram(vec(h); bins=50)
@@ -116,16 +124,19 @@ loss_tr = logitcrossentropy(model(Xtr), onehotbatch(Ytr, 1:27))
 # @test reduce(vcat, [Xtr, Xdev, Xte]) == Xs
 
 
-batch_size = 32
-loader = Flux.DataLoader((eachrow(Xtr), Ytr), batchsize=batch_size, shuffle=true);
+batch_size = 4
+Xtr_rows = eachrow(Xtr)
+loader = Flux.DataLoader((axes(Xtr, 1), Ytr), batchsize=batch_size, shuffle=true);
+(x1, y1) = first(loader)
+batch = Xtr[x1, :]
 losses = []
 opt = Flux.Adam(0.01)
 opt_state = Flux.setup(Flux.Descent(), model)  # will store optimiser momentum, etc.
-nepochs=5
+nepochs=3
 for j in 1:nepochs
     for (i, (xbatch, ybatch)) in enumerate(loader)
         loss, grads = Flux.withgradient(model) do m
-            logits = m(stack(xbatch; dims=1))
+            logits = m(@view(Xtr[xbatch, :]))
             loss = logitcrossentropy(logits, onehotbatch(ybatch, 1:27))
         end
 
@@ -151,7 +162,10 @@ loss_dev = logitcrossentropy(model(Xdev), onehotbatch(Ydev, 1:27))
 # embedding_plot(model)
 
 h = hf(Xs[1:200, :])
+
+# this plot doesn't make sense for non-tanh 
 heatmap(abs.(h) .> .99)
+heatmap(h .== 0)
 histogram(vec(h); bins=50)
 histogram(log.(vec(h)); bins=50)
 
@@ -165,28 +179,3 @@ bnbias = zeros(n_hidden, 1)
 normed_hp = (hp .- u) ./ s
 bn_hp = bngain .* normed_hp .+ bnbias
 
-a= tril(ones(Bool, 4,4))
-b = tril(trues(4,4))
-sizeof(a)
-sizeof(b)
-sizeof(true)
-
-
-A = tril(trues(3,3))
-B = rand(1:10, (3,2))
-C = A * B
-1:(size(C, 1))
-@btime axes(C, 1)
-@btime C ./ axes(C, 1)
-wei = zeros(3,3)
-# @btime A .== 0
-
-wei[.!A] .= -Inf
-wei
-
-g = SimpleDiGraph(.!A)
-collect(edges(g))
-
-m = randn(2,2)
-
-Base.power_by_squaring(m, 10)
