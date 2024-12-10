@@ -91,7 +91,7 @@ emb_dim = 10
 n_hidden = 200
 
 # model
-emb = Embedding(vocab_size, emb_dim) #;init=zeros),
+embb = emb = Embedding(vocab_size, emb_dim) #;init=zeros),
 reshape_permute = x -> reshape(permutedims(x, (2, 1, 3)), (:, block_size * emb_dim))'
 l1 = Dense(block_size * emb_dim, n_hidden, relu; init=kaiming_normal)
 l2 = Dense(n_hidden, vocab_size; init=kaiming_normal)
@@ -104,9 +104,10 @@ model = Chain(
 )
 
 # embedding_plot(model)
-
 # taking a batch
 x = Xs[1:32, :]
+ee = emb(x)
+model(x)
 # x[1,:], Ys[1]
 hf = ∘(reverse(model.layers[1:3])...)
 hf = model[1:3]
